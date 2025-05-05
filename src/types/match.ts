@@ -1,3 +1,5 @@
+import { ReactNode } from "react"
+
 export interface Player {
     id: string
     name: string
@@ -31,6 +33,7 @@ export interface Player {
   }
   
   export interface MatchInfo {
+    date: ReactNode
     homeTeam: Team
     awayTeam: Team
     score: {

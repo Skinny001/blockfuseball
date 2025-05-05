@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import type { Player, Ball, MatchEvent, MatchInfo, MatchStats } from "@/types/match"
 
 interface UseMatchSimulationProps {
@@ -17,6 +17,7 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
 
   // Match info
   const [matchInfo, setMatchInfo] = useState<MatchInfo>({
+    date: new Date().toLocaleDateString(),
     homeTeam: { name: "Manchester United", shortName: "MUN" },
     awayTeam: { name: "Liverpool", shortName: "LIV" },
     score: { home: 0, away: 0 },
@@ -77,18 +78,15 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
   }
 
   // Update player positions
-  const updatePlayerPositions = () => {
+  const updatePlayerPositions = useCallback(() => {
     setPlayers((prevPlayers) => {
       return prevPlayers.map((player) => {
-        // Random movement around target position
         const randomX = (Math.random() - 0.5) * 5
         const randomY = (Math.random() - 0.5) * 5
 
-        // Calculate new position with some randomness
         let newX = player.x + (player.targetX - player.x) * 0.05 + randomX * 0.02
         let newY = player.y + (player.targetY - player.y) * 0.05 + randomY * 0.02
 
-        // Keep players within bounds
         newX = Math.max(5, Math.min(95, newX))
         newY = Math.max(5, Math.min(95, newY))
 
@@ -99,50 +97,37 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
         }
       })
     })
-  }
+  }, [])
 
   // Update ball position
-  const updateBallPosition = () => {
-    // Find the closest player to the ball
+  const updateBallPosition = useCallback(() => {
     const closestPlayer = players.reduce(
       (closest, player) => {
         const distToBall = Math.sqrt(Math.pow(player.x - ball.x, 2) + Math.pow(player.y - ball.y, 2))
-
-        if (!closest || distToBall < closest.distance) {
-          return { player, distance: distToBall }
-        }
-        return closest
+        return !closest || distToBall < closest.distance ? { player, distance: distToBall } : closest
       },
       null as { player: Player; distance: number } | null,
     )
 
     if (closestPlayer && closestPlayer.distance < 10) {
-      // Ball follows the player with some lag
       setBall((prevBall) => ({
         x: prevBall.x + (closestPlayer.player.x - prevBall.x) * 0.2,
         y: prevBall.y + (closestPlayer.player.y - prevBall.y) * 0.2,
       }))
     } else {
-      // Ball moves slightly randomly
       setBall((prevBall) => {
         const randomX = (Math.random() - 0.5) * 2
         const randomY = (Math.random() - 0.5) * 2
-
-        let newX = prevBall.x + randomX
-        let newY = prevBall.y + randomY
-
-        // Keep ball within bounds
-        newX = Math.max(2, Math.min(98, newX))
-        newY = Math.max(2, Math.min(98, newY))
-
-        return { x: newX, y: newY }
+        return {
+          x: Math.max(2, Math.min(98, prevBall.x + randomX)),
+          y: Math.max(2, Math.min(98, prevBall.y + randomY)),
+        }
       })
     }
-  }
+  }, [players, ball.x, ball.y])
 
   // Generate match events
-  const generateMatchEvents = () => {
-    // Only generate events occasionally
+  const generateMatchEvents = useCallback(() => {
     if (Math.random() > 0.005) return
 
     const eventTypes = ["goal", "foul", "substitution"]
@@ -156,36 +141,21 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
     switch (eventType) {
       case "goal":
         description = `GOAL! ${player.name} scores for ${team === "home" ? "Manchester United" : "Liverpool"}!`
-        // Update score
         setMatchInfo((prev) => ({
           ...prev,
-          score: {
-            ...prev.score,
-            [team]: prev.score[team] + 1,
-          },
+          score: { ...prev.score, [team]: prev.score[team] + 1 },
         }))
-        // Update stats
         setMatchStats((prev) => ({
           ...prev,
-          shots: {
-            ...prev.shots,
-            [team]: prev.shots[team] + 1,
-          },
-          shotsOnTarget: {
-            ...prev.shotsOnTarget,
-            [team]: prev.shotsOnTarget[team] + 1,
-          },
+          shots: { ...prev.shots, [team]: prev.shots[team] + 1 },
+          shotsOnTarget: { ...prev.shotsOnTarget, [team]: prev.shotsOnTarget[team] + 1 },
         }))
         break
       case "foul":
         description = `Foul by ${player.name}`
-        // Update stats
         setMatchStats((prev) => ({
           ...prev,
-          fouls: {
-            ...prev.fouls,
-            [team]: prev.fouls[team] + 1,
-          },
+          fouls: { ...prev.fouls, [team]: prev.fouls[team] + 1 },
         }))
         break
       case "substitution":
@@ -205,34 +175,27 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
     }
 
     setEvents((prev) => [...prev, newEvent])
-
-    // Add to active events (will be removed after a few seconds)
     setActiveEvents((prev) => [...prev, newEvent])
-    setTimeout(() => {
+    
+    const timeoutId = setTimeout(() => {
       setActiveEvents((prev) => prev.filter((e) => e.id !== newEvent.id))
     }, 3000)
-  }
 
-  // Update player targets based on ball position
-  const updatePlayerTargets = () => {
-    setPlayers((prevPlayers) => {
-      return prevPlayers.map((player) => {
-        // Goalkeepers stay in position
+    return () => clearTimeout(timeoutId)
+  }, [players, currentTime, ball.x, ball.y])
+
+  // Update player targets
+  const updatePlayerTargets = useCallback(() => {
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) => {
         if (player.number === 1) return player
 
-        // Calculate distance to ball
         const distToBall = Math.sqrt(Math.pow(player.x - ball.x, 2) + Math.pow(player.y - ball.y, 2))
-
-        // If player is far from the ball, move towards it slightly
         if (distToBall > 20) {
-          // Home team moves towards the right, away team towards the left
           const directionFactor = player.team === "home" ? 1 : -1
-
-          // Calculate new target position
           let targetX = player.targetX + (ball.x - player.targetX) * 0.1 * directionFactor
           let targetY = player.targetY + (ball.y - player.targetY) * 0.1
 
-          // Keep targets within reasonable bounds based on player position
           if (player.team === "home") {
             targetX = Math.max(player.id.includes("h1") ? 5 : 15, Math.min(85, targetX))
           } else {
@@ -241,56 +204,29 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
 
           targetY = Math.max(10, Math.min(90, targetY))
 
-          return {
-            ...player,
-            targetX,
-            targetY,
-          }
+          return { ...player, targetX, targetY }
         }
-
         return player
       })
-    })
-  }
+    )
+  }, [ball.x, ball.y])
 
   // Update possession stats
-  const updatePossessionStats = () => {
-    // Find the closest player to the ball
+  const updatePossessionStats = useCallback(() => {
     const closestPlayer = players.reduce(
       (closest, player) => {
         const distToBall = Math.sqrt(Math.pow(player.x - ball.x, 2) + Math.pow(player.y - ball.y, 2))
-
-        if (!closest || distToBall < closest.distance) {
-          return { player, distance: distToBall }
-        }
-        return closest
+        return !closest || distToBall < closest.distance ? { player, distance: distToBall } : closest
       },
       null as { player: Player; distance: number } | null,
     )
 
     if (closestPlayer && closestPlayer.distance < 10) {
-      // Update possession stats
       setMatchStats((prev) => {
         const team = closestPlayer.player.team
-        const otherTeam = team === "home" ? "away" : "home"
-
-        // Slightly adjust possession
-        let homePossession = prev.possession.home
-        let awayPossession = prev.possession.away
-
-        if (team === "home") {
-          homePossession += 0.1
-          awayPossession -= 0.1
-        } else {
-          homePossession -= 0.1
-          awayPossession += 0.1
-        }
-
-        // Normalize to ensure they sum to 100
-        const total = homePossession + awayPossession
-        homePossession = (homePossession / total) * 100
-        awayPossession = (awayPossession / total) * 100
-
+        let homePossession = team === "home" ? prev.possession.home + 0.1 : prev.possession.home - 0.1
+        let awayPossession = 100 - homePossession
+        
         return {
           ...prev,
           possession: {
@@ -300,34 +236,28 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
         }
       })
     }
-  }
+  }, [players, ball.x, ball.y])
 
   // Main animation loop
-  const animate = () => {
+  const animate = useCallback(() => {
     const now = Date.now()
-    const deltaTime = (now - lastUpdateTimeRef.current) / 1000 // in seconds
+    const deltaTime = (now - lastUpdateTimeRef.current) / 1000
     lastUpdateTimeRef.current = now
 
-    // Update time if playing
     if (isPlaying) {
-      setCurrentTime((prevTime) => {
-        const newTime = prevTime + deltaTime * timeScale
-        return Math.min(newTime, totalTime)
-      })
+      setCurrentTime((prevTime) => Math.min(prevTime + deltaTime * timeScale, totalTime))
     }
 
-    // Update simulation
     updatePlayerPositions()
     updateBallPosition()
     updatePlayerTargets()
     updatePossessionStats()
     generateMatchEvents()
 
-    // Continue animation loop
     animationFrameRef.current = requestAnimationFrame(animate)
-  }
+  }, [isPlaying, timeScale, totalTime, updatePlayerPositions, updateBallPosition, updatePlayerTargets, updatePossessionStats, generateMatchEvents])
 
-  // Start/stop animation based on isPlaying
+  // Start/stop animation
   useEffect(() => {
     if (isPlaying) {
       lastUpdateTimeRef.current = Date.now()
@@ -341,28 +271,27 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
         cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [isPlaying, timeScale])
+  }, [isPlaying, animate])
 
   // Control functions
-  const togglePlayPause = () => {
-    // This is handled by the parent component through isPlaying prop
-  }
+  const togglePlayPause = useCallback(() => {}, [])
+  
+  const skipForward = useCallback(() => {
+    setCurrentTime((prevTime) => Math.min(prevTime + 60, totalTime))
+  }, [totalTime])
 
-  const skipForward = () => {
-    setCurrentTime((prevTime) => Math.min(prevTime + 60, totalTime)) // Skip forward 1 minute
-  }
+  const skipBackward = useCallback(() => {
+    setCurrentTime((prevTime) => Math.max(prevTime - 60, 0))
+  }, [])
 
-  const skipBackward = () => {
-    setCurrentTime((prevTime) => Math.max(prevTime - 60, 0)) // Skip backward 1 minute
-  }
-
-  const resetMatch = () => {
+  const resetMatch = useCallback(() => {
     setCurrentTime(0)
     setPlayers(generateInitialPlayers())
     setBall({ x: 50, y: 50 })
     setEvents([])
     setActiveEvents([])
     setMatchInfo({
+      date: new Date().toLocaleDateString(),
       homeTeam: { name: "Manchester United", shortName: "MUN" },
       awayTeam: { name: "Liverpool", shortName: "LIV" },
       score: { home: 0, away: 0 },
@@ -378,14 +307,10 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
       redCards: { home: 0, away: 0 },
       offsides: { home: 0, away: 0 },
     })
-  }
+  }, [])
 
   return {
-    matchState: {
-      players,
-      ball,
-      activeEvents,
-    },
+    matchState: { players, ball, activeEvents },
     matchInfo,
     matchStats,
     matchEvents: events,

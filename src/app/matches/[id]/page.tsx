@@ -13,7 +13,13 @@ import { MatchEvents } from "@/components/match-events"
 import { MatchInfo } from "@/components/match-info"
 import { useMatchSimulation } from "@/hooks/use-match-simulation"
 
-export default function MatchPage({ params }: { params: { id: string } }) {
+type MatchPageProps = {
+  params: {
+    id: string
+  }
+}
+
+export default function MatchPage({ params }: MatchPageProps) {
   const [isPlaying, setIsPlaying] = useState(true)
   const [timeScale, setTimeScale] = useState(1)
   const [currentTab, setCurrentTab] = useState("pitch")
@@ -29,7 +35,6 @@ export default function MatchPage({ params }: { params: { id: string } }) {
     togglePlayPause,
     skipForward,
     skipBackward,
-    resetMatch,
   } = useMatchSimulation({ isPlaying, timeScale })
 
   const formattedTime = () => {

@@ -29,7 +29,6 @@ export default function LiveMatchPage() {
     togglePlayPause,
     skipForward,
     skipBackward,
-    resetMatch,
   } = useMatchSimulation({ isPlaying, timeScale })
 
   const formattedTime = () => {
