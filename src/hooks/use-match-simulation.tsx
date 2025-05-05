@@ -224,8 +224,8 @@ export function useMatchSimulation({ isPlaying, timeScale }: UseMatchSimulationP
     if (closestPlayer && closestPlayer.distance < 10) {
       setMatchStats((prev) => {
         const team = closestPlayer.player.team
-        let homePossession = team === "home" ? prev.possession.home + 0.1 : prev.possession.home - 0.1
-        let awayPossession = 100 - homePossession
+        const homePossession = team === "home" ? prev.possession.home + 0.1 : prev.possession.home - 0.1
+        const awayPossession = 100 - homePossession
         
         return {
           ...prev,
